@@ -1,0 +1,57 @@
+const express = require('express');
+const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
+
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+// 👇 THIS LINE IS CRITICAL FOR DOCKER
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/market_reviews';
+
+mongoose.connect(MONGO_URI)
+  .then(() => console.log("Review Service Connected"))
+  .catch(err => console.log(err));
+
+const ReviewSchema = new mongoose.Schema({
+  userId: String,
+  targetName: String,
+  type: String,
+  text: String,
+  stars: Number
+});
+const Review = mongoose.model('Review', ReviewSchema);
+
+const verifyToken = (req, res, next) => {
+  const token = req.headers['authorization'];
+  if (!token) return res.status(401).json("Access Denied");
+  try {
+    const verified = jwt.verify(token, 'mySuperSecretKey123');
+    req.user = verified; 
+    next(); 
+  } catch (err) { res.status(400).json("Invalid Token"); }
+};
+
+app.post('/reviews', verifyToken, async (req, res) => {
+  try {
+    const newReview = new Review({
+      userId: req.user.id, 
+      targetName: req.body.targetName,
+      type: req.body.type || 'product', 
+      text: req.body.text,
+      stars: req.body.stars
+    });
+    await newReview.save();
+    res.json("Review Saved!");
+  } catch(err) { res.status(500).json(err.message); }
+});
+
+app.get('/reviews', async (req, res) => {
+  const { type } = req.query;
+  const filter = type ? { type: type } : {};
+  const allReviews = await Review.find(filter);
+  res.json(allReviews);
+});
+
+app.listen(3002, () => console.log("Review Service running on 3002"));

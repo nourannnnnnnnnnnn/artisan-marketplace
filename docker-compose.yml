@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # --- DATABASES ---
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+
+  mongo:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+
+  # --- BACKEND SERVICES ---
+  auth-service:
+    build: ./auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      DB_HOST: postgres 
+    depends_on:
+      - postgres
+
+  review-service:
+    build: ./review-service
+    ports:
+      - "3002:3002"
+    environment:
+      # 👇 THIS WAS MISSING
+      MONGO_URI: mongodb://mongo:27017/market_reviews
+    depends_on:
+      - mongo
+
+  product-service:
+    build: ./product-service
+    ports:
+      - "3003:3003"
+    environment:
+      # 👇 THIS WAS MISSING
+      MONGO_URI: mongodb://mongo:27017/market_products
+    depends_on:
+      - mongo
+
+  # --- FRONTEND ---
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
