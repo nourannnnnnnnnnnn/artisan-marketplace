@@ -8,8 +8,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// --- DATABASE CONNECTION (Docker Ready) ---
-// If running in Docker, it uses 'postgres'. If running locally, it uses 'localhost'.
+// --- DATABASE CONNECTION ---
 const pool = new Pool({
   user: 'postgres',
   host: process.env.DB_HOST || 'localhost', 
@@ -18,17 +17,28 @@ const pool = new Pool({
   port: 5432,
 });
 
-// Create Table V2 (With Roles)
-pool.query(`
-  CREATE TABLE IF NOT EXISTS users_v2 (
-    id SERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'buyer' 
-  )
-`).catch(err => console.log("DB Error:", err));
+// --- ROBUST TABLE CREATION (With Retry) ---
+// This function keeps trying to create the table until the database is ready
+const connectWithRetry = () => {
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS users_v2 (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password VARCHAR(255) NOT NULL,
+      role VARCHAR(50) DEFAULT 'buyer' 
+    )
+  `)
+  .then(() => console.log("✅ Table 'users_v2' created successfully!"))
+  .catch((err) => {
+    console.log("⏳ Database not ready, retrying in 5 seconds...", err.message);
+    setTimeout(connectWithRetry, 5000); // Retry after 5 seconds
+  });
+};
 
-// REGISTER (Accepts Role)
+// Start the retry loop immediately
+connectWithRetry();
+
+// REGISTER
 app.post('/auth/register', async (req, res) => {
   try {
     const { email, password, role } = req.body;
@@ -46,7 +56,7 @@ app.post('/auth/register', async (req, res) => {
   }
 });
 
-// LOGIN (Returns Role & Token)
+// LOGIN
 app.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -56,7 +66,6 @@ app.post('/auth/login', async (req, res) => {
     const validPass = await bcrypt.compare(password, user.rows[0].password);
     if (!validPass) return res.status(401).json("Wrong password");
 
-    // Include Role in Token
     const token = jwt.sign({ id: user.rows[0].id, role: user.rows[0].role }, 'mySuperSecretKey123');
     res.json({ token, role: user.rows[0].role });
   } catch (err) { 
