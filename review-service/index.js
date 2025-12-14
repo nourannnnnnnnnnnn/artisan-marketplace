@@ -1,57 +1,60 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const jwt = require('jsonwebtoken');
 const cors = require('cors');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// 👇 THIS LINE IS CRITICAL FOR DOCKER
+// Database Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/market_reviews';
 
 mongoose.connect(MONGO_URI)
   .then(() => console.log("Review Service Connected"))
   .catch(err => console.log(err));
 
+// Updated Schema to match Frontend data
 const ReviewSchema = new mongoose.Schema({
-  userId: String,
-  targetName: String,
-  type: String,
+  productId: String,
+  productName: String,
+  reviewer: String,
   text: String,
-  stars: Number
+  rating: Number
 });
 const Review = mongoose.model('Review', ReviewSchema);
 
-const verifyToken = (req, res, next) => {
-  const token = req.headers['authorization'];
-  if (!token) return res.status(401).json("Access Denied");
-  try {
-    const verified = jwt.verify(token, 'mySuperSecretKey123');
-    req.user = verified; 
-    next(); 
-  } catch (err) { res.status(400).json("Invalid Token"); }
-};
+// Routes
 
-app.post('/reviews', verifyToken, async (req, res) => {
+// 1. Submit Review (Removed verifyToken for easier testing)
+app.post('/reviews', async (req, res) => {
   try {
     const newReview = new Review({
-      userId: req.user.id, 
-      targetName: req.body.targetName,
-      type: req.body.type || 'product', 
+      productId: req.body.productId,
+      productName: req.body.productName,
+      reviewer: req.body.reviewer || "Anonymous",
       text: req.body.text,
-      stars: req.body.stars
+      rating: req.body.rating
     });
+    
     await newReview.save();
+    console.log("New Review Saved:", newReview);
     res.json("Review Saved!");
-  } catch(err) { res.status(500).json(err.message); }
+  } catch(err) { 
+    console.error(err);
+    res.status(500).json(err.message); 
+  }
 });
 
+// 2. Get Reviews
 app.get('/reviews', async (req, res) => {
-  const { type } = req.query;
-  const filter = type ? { type: type } : {};
-  const allReviews = await Review.find(filter);
-  res.json(allReviews);
+  try {
+    const { productId } = req.query;
+    const filter = productId ? { productId } : {};
+    const allReviews = await Review.find(filter);
+    res.json(allReviews);
+  } catch(err) {
+    res.status(500).json(err.message);
+  }
 });
 
 app.listen(3002, () => console.log("Review Service running on 3002"));

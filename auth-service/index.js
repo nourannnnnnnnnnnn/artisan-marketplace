@@ -1,76 +1,66 @@
 const express = require('express');
-const { Pool } = require('pg'); 
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const cors = require('cors');
+const cors = require('cors'); // <--- 1. ADD THIS
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(cors()); // <--- 2. USE THIS
 
-// --- DATABASE CONNECTION ---
+// Database Connection
 const pool = new Pool({
-  user: 'postgres',
-  host: process.env.DB_HOST || 'localhost', 
-  database: 'postgres',
-  password: '1234',
-  port: 5432,
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:password@postgres:5432/market_auth'
 });
 
-// --- ROBUST TABLE CREATION (With Retry) ---
-// This function keeps trying to create the table until the database is ready
-const connectWithRetry = () => {
+// Wait for DB to start
+setTimeout(() => {
   pool.query(`
     CREATE TABLE IF NOT EXISTS users_v2 (
       id SERIAL PRIMARY KEY,
       email VARCHAR(255) UNIQUE NOT NULL,
       password VARCHAR(255) NOT NULL,
-      role VARCHAR(50) DEFAULT 'buyer' 
-    )
-  `)
-  .then(() => console.log("✅ Table 'users_v2' created successfully!"))
-  .catch((err) => {
-    console.log("⏳ Database not ready, retrying in 5 seconds...", err.message);
-    setTimeout(connectWithRetry, 5000); // Retry after 5 seconds
-  });
-};
+      role VARCHAR(50) NOT NULL
+    );
+  `).then(() => console.log("✅ Table 'users_v2' created successfully!"))
+    .catch(err => console.error("❌ Error creating table:", err));
+}, 5000);
 
-// Start the retry loop immediately
-connectWithRetry();
+// --- ROUTES ---
 
 // REGISTER
-app.post('/auth/register', async (req, res) => {
+app.post('/register', async (req, res) => {
+  const { email, password, role } = req.body;
   try {
-    const { email, password, role } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
-    const userRole = role || 'buyer'; 
-
     const newUser = await pool.query(
-      'INSERT INTO users_v2 (email, password, role) VALUES ($1, $2, $3) RETURNING *',
-      [email, hashedPassword, userRole]
+      "INSERT INTO users_v2 (email, password, role) VALUES ($1, $2, $3) RETURNING *",
+      [email, hashedPassword, role]
     );
-    res.json(newUser.rows[0]);
-  } catch (err) { 
+    
+    const token = jwt.sign({ id: newUser.rows[0].id, role }, 'mySuperSecretKey123');
+    res.json({ token, role, message: "User created!" });
+  } catch (err) {
     console.error(err);
-    res.status(500).json("Server Error"); 
+    res.status(500).json({ message: "User already exists or DB error" });
   }
 });
 
 // LOGIN
-app.post('/auth/login', async (req, res) => {
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
   try {
-    const { email, password } = req.body;
-    const user = await pool.query('SELECT * FROM users_v2 WHERE email = $1', [email]);
-    if (user.rows.length === 0) return res.status(401).json("User not found");
-    
+    const user = await pool.query("SELECT * FROM users_v2 WHERE email = $1", [email]);
+    if (user.rows.length === 0) return res.status(400).json({ message: "User not found" });
+
     const validPass = await bcrypt.compare(password, user.rows[0].password);
-    if (!validPass) return res.status(401).json("Wrong password");
+    if (!validPass) return res.status(400).json({ message: "Invalid password" });
 
     const token = jwt.sign({ id: user.rows[0].id, role: user.rows[0].role }, 'mySuperSecretKey123');
     res.json({ token, role: user.rows[0].role });
-  } catch (err) { 
+  } catch (err) {
     console.error(err);
-    res.status(500).json("Server Error"); 
+    res.status(500).json({ message: "Server error" });
   }
 });
 

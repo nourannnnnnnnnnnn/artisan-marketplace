@@ -5,15 +5,19 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_PASSWORD: 1234
-      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: 1234    # 👈 Password is 1234
+      POSTGRES_DB: postgres      # 👈 Database name is postgres
     ports:
       - "5432:5432"
+    volumes:                     # Optional: Keeps data safe, but we will wipe it once now
+      - postgres_data:/var/lib/postgresql/data
 
   mongo:
     image: mongo:6.0
     ports:
       - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
 
   # --- BACKEND SERVICES ---
   auth-service:
@@ -21,7 +25,8 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DB_HOST: postgres 
+      # 👇 CRITICAL FIX: Match the password (1234) and DB (postgres) defined above
+      - DATABASE_URL=postgresql://postgres:1234@postgres:5432/postgres
     depends_on:
       - postgres
 
@@ -30,8 +35,7 @@ services:
     ports:
       - "3002:3002"
     environment:
-      # 👇 THIS WAS MISSING
-      MONGO_URI: mongodb://mongo:27017/market_reviews
+      - MONGO_URI=mongodb://mongo:27017/market_reviews
     depends_on:
       - mongo
 
@@ -40,8 +44,7 @@ services:
     ports:
       - "3003:3003"
     environment:
-      # 👇 THIS WAS MISSING
-      MONGO_URI: mongodb://mongo:27017/market_products
+      - MONGO_URI=mongodb://mongo:27017/market_products
     depends_on:
       - mongo
 
@@ -49,6 +52,8 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend/src:/app/src
+      - "5174:5173"
+
+volumes:
+  postgres_data:
+  mongo_data:

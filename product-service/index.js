@@ -6,7 +6,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// 👇 THIS LINE IS CRITICAL FOR DOCKER
+// Database Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/market_products';
 
 mongoose.connect(MONGO_URI)
@@ -22,6 +22,9 @@ const ProductSchema = new mongoose.Schema({
 });
 const Product = mongoose.model('Product', ProductSchema);
 
+// --- ROUTES ---
+
+// 1. Seed Data
 app.post('/products/seed', async (req, res) => {
   const sampleProducts = [
     { name: "Handwoven Basket", price: 45, category: "Home", tags: ["eco", "handmade"] },
@@ -34,6 +37,7 @@ app.post('/products/seed', async (req, res) => {
   res.json("Seeded with Tags!");
 });
 
+// 2. Get All Products (Buyer)
 app.get('/products', async (req, res) => {
   try {
     const { search, category, tag } = req.query;
@@ -44,6 +48,18 @@ app.get('/products', async (req, res) => {
     const products = await Product.find(query);
     res.json(products);
   } catch(err) { res.status(500).json(err.message); }
+});
+
+// 3. Add New Product (Seller) <--- THIS IS THE MISSING PART
+app.post('/products', async (req, res) => {
+  try {
+    const newProduct = new Product(req.body);
+    await newProduct.save();
+    console.log("New Product Saved:", newProduct.name);
+    res.json(newProduct);
+  } catch (err) {
+    res.status(500).json(err.message);
+  }
 });
 
 app.listen(3003, () => console.log("Product Service running on 3003"));
