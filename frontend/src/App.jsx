@@ -6,20 +6,25 @@ import BuyerDashboard from './BuyerDashboard';
 
 function App() {
   const [userRole, setUserRole] = useState(null);
+  const [username, setUsername] = useState(""); // 👈 Store the username here
 
-  // ✅ 1. DEFINE LOGOUT FUNCTION
-  const handleLogout = () => {
-    setUserRole(null); // This clears the user and forces the Login Page to show
+  const handleLogin = (role, name) => {
+    setUserRole(role);
+    setUsername(name); // 👈 Save it when they login
   };
 
-  // If not logged in, show Login Page
+  const handleLogout = () => {
+    setUserRole(null);
+    setUsername("");
+  };
+
   if (!userRole) {
-    return <LoginPage onLogin={(role) => setUserRole(role)} />;
+    return <LoginPage onLogin={handleLogin} />;
   }
 
-  // ✅ 2. PASS 'onLogout' TO DASHBOARDS
+  // ✅ Pass 'username' prop to SellerDashboard
   if (userRole === 'admin') return <AdminDashboard onLogout={handleLogout} />;
-  if (userRole === 'seller') return <SellerDashboard onLogout={handleLogout} />;
+  if (userRole === 'seller') return <SellerDashboard onLogout={handleLogout} username={username} />;
   if (userRole === 'buyer') return <BuyerDashboard onLogout={handleLogout} />;
   
   return <div>Unknown Role</div>;
